@@ -1,6 +1,6 @@
 ---
 title: " Set up a virtual server on AWS EC2 Console (in anticipation of hosting Shiny apps) "
-draft: true
+draft: false
 description: "Detailed steps for setting up a lightweight server on AWS. "
 document-type: "blog"
 categories: [AWS]
