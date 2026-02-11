@@ -1,371 +1,606 @@
 ---
-title: " Set up a virtual server on AWS EC2 Console (in anticipation of hosting Shiny apps) "
-draft: false
-description: "Detailed steps for setting up a lightweight server on AWS. "
+title: "Setting Up a Virtual Server on AWS EC2 Console"
+subtitle: >
+  A step-by-step walkthrough for launching, securing,
+  and accessing a lightweight cloud server
+author: "Ronald G. Thomas"
+date: "2026-02-11"
+categories: [AWS, DevOps, Docker]
+description: >
+  I did not really know how cloud servers worked
+  until I needed to host a Shiny app for collaborators
+  and had to figure out AWS EC2 from scratch.
+image: "media/images/hero.jpg"
 document-type: "blog"
-categories: [AWS]
-image: "img/rshiny.png"
-#editor:
-#  markdown:
-#format:
-#
+draft: false
+execute:
+  echo: true
+  warning: false
+  message: false
+format:
+  html:
+    code-fold: false
+    code-tools: false
 ---
 
-```{r init, include=FALSE}
+![AWS EC2 console workflow for launching a virtual
+server](media/images/hero.jpg){.img-fluid width=80%}
 
-
-```
-::: column-margin
-![under construction](img/crane.jpg)
-<font size="1"> Photo by
-<a href="https://unsplash.com/@nathangwaters?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Nathan
-Waters</a> on
-<a href="https://unsplash.com/s/photos/construction?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a>
-</font>
-:::
+*Setting up a cloud server -- the gateway to hosting
+web applications on your own terms.*
 
 # Introduction
 
-::: {.callout-note}
-## Motivation for this post: 
+I did not really know how virtual servers worked until I
+had a Shiny app running locally and needed to share it with
+collaborators over the web. The app was finished, the code
+was clean, and everything worked on my laptop. But "works on
+my machine" is not a deployment strategy.
 
-Ok! I've got my Shiny app running just the way I want it. Works great! Now, how
-do I get it up on the web and shared with my collaborators?
+The challenge broke down into two parts: first, create and
+launch a virtual server in the cloud; second, configure that
+server to provide secure access to the Shiny app. This post
+covers the first part in detail, walking through every step
+of setting up an AWS EC2 instance from the console.
 
-:::
+I found the process surprisingly approachable once I
+understood the four components that need to be in place
+before launching an instance. The terminology can be
+intimidating at first -- elastic IPs, security groups, key
+pairs -- but each concept maps to something straightforward
+once you see what it does in practice.
 
-Assuming we have a working shiny app, named for example `power1_app`, we next need to address the
-task of how to host the app on the web. To
-answer this challenge we'll break the problem into two parts: 
+## Motivations
 
-1) Create and launch a virtual server. and 
-2)  Configure the server to provide  secure
-access to our Shiny app. 
+- I had a working Shiny app and no way to share it with
+  collaborators who needed access from different locations.
+- I wanted to understand the fundamentals of cloud server
+  management rather than relying on managed platforms like
+  shinyapps.io.
+- I needed a server that could also run Docker containers
+  for reproducible research environments.
+- I was frustrated by documentation that assumed prior
+  knowledge of AWS infrastructure concepts.
+- I wanted a lightweight, low-cost server I could control
+  completely, including the operating system and installed
+  software.
+- I needed the ability to host multiple applications on a
+  single server behind a proper domain name with HTTPS.
 
-Below we recommend a solution we've found to be effective and
-straightforward. 
-We'll describe how to  'spin up' a server on
-Amazon Web Services using the EC2 (Elastic Compute Cloud) console.  In a
-separate post 
-[here](https://focusonR.org/https://focusonr.org/blog/dockerize_simple/)
-we'll show how, through the application of Docker, R,
-Shiny, and Caddy (webserver) functionality we can have a fully
-functional and secure app available on the web with minimal effort.
+## Objectives
 
-# Hosting
+1. Launch an Ubuntu-based EC2 instance on the AWS free tier,
+   configured with an SSH key pair and firewall rules.
+2. Obtain and associate a static IP address and domain name
+   with the server instance.
+3. Configure secure SSH access from a local workstation to
+   the remote server.
+4. Prepare the instance for post-launch tasks by running a
+   startup script that installs Docker and Docker Compose.
 
-No matter what method we use  to host a shiny app 
-online  we'll need to complete the following pre- and post-launch sets
-of tasks one way or another:
+I am documenting my learning process here. If you spot
+errors or have better approaches, please let me know.
 
-Pre-launch tasks:
+![EC2 dashboard screenshot showing the instance launch
+workflow](media/images/ambiance1.png){.img-fluid}
 
-1.  obtain a static IP address, e.g. `111.222.333.444`
-2.  obtain a domain name, e.g. `rgtlab.org`. 
-4.  define a security model, aka  a firewall,  for the server
-3. create a public and private RSA keypair. 
-3.  configure a virtual server. Configuration entails 
-   selecting the operating system, the number of CPUs, the amount of memory, and the operating system.
-3. generate the virtual server, along with a keypair and security group.
-3. associate the domain name with the static IP address. 
-2.  associate the IP with the server 
+*The EC2 dashboard is the control centre for managing
+virtual servers, security groups, and elastic IP addresses.*
 
-Post-launch tasks:
+# Prerequisites and Setup
 
-1.  install and configure a webserver 
-5.  obtain and install an SSL certificate (to allow encrypted Web communication)
-6.  setup an authentication method (password protection for app access)
-7.  configure a reverse proxy i.e. a method to translate https (port 443) requests to
-Shiny (port 3838). 
+Before beginning, I needed the following in place:
 
-::: {.callout-note}
+- An AWS account (free tier eligible accounts work for
+  this tutorial).
+- A local terminal with SSH installed (macOS Terminal or
+  any Linux shell).
+- Basic familiarity with the command line.
+- A willingness to spend approximately 30 minutes working
+  through the AWS console interface.
 
-## Not to worry: 
+The AWS free tier includes 750 hours per month of `t2.micro`
+instance usage for the first 12 months, which is sufficient
+for hosting a lightweight Shiny application.
 
-At first glance these  requirements may appear daunting, but on closer
-inspection each can be met with relative ease through the use of the right tools. 
-:::
+# What is AWS EC2?
 
+Amazon Elastic Compute Cloud (EC2) is a service that
+provides resizable virtual servers in the cloud. Think of it
+as renting a computer that lives in an Amazon data centre.
+You choose the operating system, the amount of memory and
+storage, and the network configuration. Once launched, you
+connect to it over SSH just as you would connect to any
+remote Linux machine.
 
-::: {.callout-note appearance="simple"}
-## Actually ... 
+The key distinction from a managed hosting platform is
+control: you manage everything on the server yourself,
+from the operating system packages to the web server
+configuration. This requires more effort than a managed
+service, but it provides complete flexibility over the
+software stack.
 
-Technically, if the goal is simply to get the app up on the Web and
-security is not an issue, its not
-required to have a static IP,  or a domain name,  or even a reverse
-proxy. but if these elements of the process are skipped the server will
-only be able to communicate via the unencrypted HTTP protocol and the
-site URL will be something like `111.222.333.444:3838/power1_shiny`, and
-anyone with the URL will be able to reach the site. Also the IP address
-will change every time the server is rebooted. 
+# The Four Pre-Launch Components
 
-:::
+No matter what method one uses to host a Shiny app online,
+the following pre-launch tasks need to be completed:
 
-## Select a hosting service 
+1. Obtain a static IP address (e.g., `111.222.333.444`).
+2. Obtain a domain name (e.g., `rgtlab.org`).
+3. Define a security model (firewall) for the server.
+4. Create a public and private RSA key pair.
+5. Configure a virtual server by selecting the operating
+   system, CPU count, memory, and storage.
+6. Generate the virtual server along with the key pair and
+   security group.
+7. Associate the domain name with the static IP address.
+8. Associate the IP with the server.
 
+After launch, the post-launch tasks include installing a
+web server, obtaining an SSL certificate, setting up
+authentication, and configuring a reverse proxy to translate
+HTTPS (port 443) requests to Shiny (port 3838).
 
-There are a number of cloud based server hosting options to choose from: for
-example Microsoft Azure, Oracle, Google Cloud, Amazon AWS EC2, Digital Ocean or
-Hetzner to name a few. Each has their own approach to setting up a custom
-virtual server. Several have free or low-cost service tiers available.
+At first glance these requirements may appear daunting, but
+on closer inspection each can be met with relative ease
+through the right tools. Technically, if the sole goal is
+to get the app on the web and security is not an issue, a
+static IP, domain name, and reverse proxy are not strictly
+required. However, without them the server will only
+communicate via unencrypted HTTP, the URL will be something
+like `111.222.333.444:3838/power1_shiny`, anyone with the
+URL can reach the site, and the IP address will change every
+time the server reboots.
 
-In this post we'll provide a step-by-step description of a process using
-Amazon Web Services Elastic Compute Cloud (AWS EC2) infrastructure. 
+# Selecting a Hosting Service
 
+There are several cloud-based server hosting options: for
+example, Microsoft Azure, Oracle, Google Cloud, Amazon AWS
+EC2, Digital Ocean, and Hetzner. Each has its own approach
+to setting up a custom virtual server, and several offer
+free or low-cost service tiers.
 
-AWS is, in our view, a reasonable choice for setting up a small custom server.
-Its not the cheapest option, but the system is well documented and, in our
-experience, reliable. 
+I found AWS to be a reasonable choice for setting up a small
+custom server. It is not the cheapest option, but the system
+is well documented and, in my experience, reliable.
 
-The first step is to get set up with AWS. 
-To start, open the EC2 console by visiting the URL:
+To start, I opened the EC2 console by visiting:
 
-``` sh
-   https://aws.amazon.com/console
-```
-(see margin figure)
-
-In the console window choose regional service. For us its "N. California".
-
-::: column-margin
-![AWS console](img/aws_dash.png)
-:::
-
-Next create an account, or sign in. Once you're logged in navigate to the
-EC2 dashboard.  Its through this dashboard (aka console) that we'll define the
-parameters for the type of server to launch and the mechanisms for communicating
-with it. We'll refer to these as "Pre-Launch" tasks. 
- 
-
-# AWS Working Environment
-
-## Overview
-
-Along with selecting a server we need to set up a working environment.
-We recommend setting up the working environment before launching the
-server, as it saves some back and forth with the console, but doing so
-is not required. The working environment consists of four main
-components: 
-
-1. A security credential (RSA key-pair) to allow  remote and secure login to
-the virtual server once its launched. 
-
-2. A firewall, or security model, which  restricts incoming server
-   access. The purpose of the firewall is to close ofe all incoming
-   packet traffic except through those ports specifically named.  
-
-3. A static IP address, say 111.222.333.444. A static IP is required for
-   maintaining the link between the domain name and the server when
-   rebooting. (The default is for the instance/server to be assigned a
-   new IP address each time its rebooted).
-
-4. A domain name, say `rgtlab.org`. A domain name is not required but
-   will facilitate collaborator access by not requiring the use of the
-   IP address directly.
-
-These working environment components are not directly tied to any specific
-server. In fact, you can define multiple instances of each component. The only
-requirement is that you pick one of each to associate with each server. 
-
-## Work Environment Details. 
-
-### **Ssh key pair**
-
-In order to securely communicate with the server we need to exchange an
-`RSA` key pair with `AWS.` The pair consists of a **private** key and a
-**public** key.   We can define a key pair in one of two ways in EC2.
-Either, generate the pair locally, on our workstation and upload the
-public key to EC2, or have EC2 generate the key pair and download the
-private key.  The EC2 based generation process will place the public key
-in the `~/.ssh/authorized_keys` file on the server.
-
-For the first option (local generation)
-we create a directory on our workstation to hold the keys and navigate to it,
-e.g. `~/.ssh`.    In the `~/.ssh` directory generate the keys with the command
-
-``` sh
-> ssh-keygen -m PEM
+```sh
+https://aws.amazon.com/console
 ```
 
-`PEM` defines the key format. More information on public key
-authentication can be found
-[(here)](https://www.ssh.com/academy/ssh/public-key-authentication).  Also
-detailed instructions are available on AWS 
-[(here)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) 
+In the console window I chose the regional service closest
+to my location (N. California). I then created an account,
+signed in, and navigated to the EC2 dashboard. It is through
+this dashboard that we define the parameters for the type of
+server to launch and the mechanisms for communicating with
+it.
 
-In the interactive
-dialog  that follows name the key prefix something like `power1_app.pem`.
-The dialog will ask for a passphrase. You can enter a phrase for an
-additional level of security, but its not required.  The `ssh-keygen`
-program will generate two files: `power1_app.pem` and `power1_app.pem.pub`
+# Setting Up the Working Environment
 
+Along with selecting a server, I needed to set up a working
+environment. I recommend setting up these components before
+launching the server, as it saves some back-and-forth with
+the console.
 
-To complete the process return to the  `EC2 dashboard`  and select `Network & Security/Keypair/Actions` and
-then `Import key pair` in the left panel. 
-Enter the name `power1_app`
-and select the `Browse` button. 
-Navigate to the 
-`~/.ssh/power1_app.pem.pub` file  and 
-and select the `Import key pair ` button at the bottom of the page. 
+The working environment consists of four main components:
 
-For the second approach (`EC2` generated) select `Create key pair` button in the upper right of
-the console page.  A form will appears and ask for a name. Enter something like
-`power1_app`.  Select `RSA` for key pair type and `.pem` for key file format.
-The keys will be created and the private key `power1_app.pem` will be offered for download
-to the local machine. We suggest placing it in the `~/.ssh` directory.
-Lastly, change the  permissions for the private key,  so only you can
-access with the following command:
+1. **Security credential (RSA key pair):** Allows remote
+   and secure login to the virtual server once launched.
+2. **Firewall (security group):** Restricts incoming server
+   access by closing all incoming traffic except through
+   specifically named ports.
+3. **Static IP address:** Maintains the link between the
+   domain name and the server across reboots. Without it,
+   a new IP is assigned each time the instance restarts.
+4. **Domain name:** Facilitates collaborator access by
+   providing a human-readable URL rather than a raw IP
+   address.
 
-``` sh
-> sudo chmod 400 power1_app.pem
+These components are not directly tied to any specific
+server. You can define multiple instances of each and
+associate one of each with each server.
+
+## SSH Key Pair
+
+To securely communicate with the server, I needed to
+exchange an RSA key pair with AWS. The pair consists of a
+private key and a public key. EC2 supports two approaches:
+generate the pair locally and upload the public key, or
+have EC2 generate the pair and download the private key.
+
+For local generation, I created a directory on my
+workstation to hold the keys and navigated to it:
+
+```sh
+cd ~/.ssh
+ssh-keygen -m PEM
 ```
 
-### **Firewall**
+The `PEM` flag defines the key format. More information on
+public key authentication is available from the
+[SSH Academy](https://www.ssh.com/academy/ssh/public-key-authentication)
+and from the
+[AWS documentation](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html).
 
+In the interactive dialog that follows, I named the key
+prefix `power1_app.pem`. The dialog asks for a passphrase;
+entering one adds an additional level of security, but it
+is not required. The `ssh-keygen` program generates two
+files: `power1_app.pem` and `power1_app.pem.pub`.
 
-To create a firewall, click on `Security groups` under **Network \& Security** settings in the left hand panel.
-Choose **Create security group**,  and 
-name the security group  something like `power1_app`.  
-Under `Inbound Rules` select SSH and HTTPS from the `Type` dropdown menu. 
-Select `Anywhere IPv4 0.0.0.0/0` for both (??). 
+To complete the process, I returned to the EC2 dashboard
+and selected **Network & Security > Key Pairs > Actions >
+Import key pair** in the left panel. I entered the name
+`power1_app`, clicked **Browse**, navigated to the
+`~/.ssh/power1_app.pem.pub` file, and selected **Import
+key pair**.
 
-This will create a firewall that leaves open only ports 22 and 443, for `ssh` and
-`https` incoming traffic, respectively. 
+For the EC2-generated approach, I selected **Create key
+pair** in the upper right of the console page. A form
+appears asking for a name (e.g., `power1_app`). I selected
+RSA for key pair type and `.pem` for key file format. The
+keys were created and the private key `power1_app.pem` was
+offered for download. I placed it in the `~/.ssh` directory
+and changed the permissions so only I could access it:
 
-### **Static IP address**
+```sh
+sudo chmod 400 power1_app.pem
+```
 
-You can use the `EC2 elastic IP` service to get a static IP. Navigate to **Network
-and Security** again and select **Allocate Elastic IP**. An IP will be assigned
-from the EC2 pool of available IPv4 IP addresses e.g. 13.57.139.31. 
+![Soft-focus photograph suggesting the calm of working
+through infrastructure
+setup](media/images/ambiance2.png){.img-fluid}
 
-### **Domain Name**
+*Taking time to set up the working environment properly
+pays dividends when the server is running in production.*
 
-To obtain a dedicated domain name,  leave the `EC2 dashboard` and go to  Amazon route 53 dashboard
-to select a domain name and associate it  with our static IP (select
-`Service` at the top of the dashboard and search for `Route 53`).
+## Firewall (Security Group)
 
+To create a firewall, I clicked on **Security Groups**
+under **Network & Security** in the left panel. I chose
+**Create security group** and named it `power1_app`. Under
+**Inbound Rules**, I selected SSH and HTTPS from the
+**Type** dropdown menu, and selected **Anywhere IPv4
+0.0.0.0/0** for both.
 
-Once a domain name is acquired, e.g. `rgtlab.org`,  you can associate it
-with any IP address, static or dynamic. This can be done via the `Route
-53 ` service. For example, to associate domain name `rgtlab.org` with
-the elastic IP 111.2222.333.444 do the following in Route 53:
+This creates a firewall that leaves open only ports 22 and
+443 for SSH and HTTPS incoming traffic, respectively.
 
--   click on `hosted zones` in the side panel
--   click on `rgtlab.org` in center panel
--   click on checkbox for `rgtlab.org` type=A line
--   then click on edit record in right panel
--   change IP address to the assigned static 111.222.333.444 in "value".
+## Static IP Address
 
-::: column-margin
-![](img/ec2a.png)
-:::
+I used the EC2 Elastic IP service to obtain a static IP.
+I navigated to **Network and Security**, selected
+**Allocate Elastic IP**, and an IP was assigned from the
+EC2 pool of available IPv4 addresses (e.g., 13.57.139.31).
 
-# Select and launch instance
+## Domain Name
 
-2.  From `Instances` in the EC2 dashboard, click `Launch Instances` 
-Name the server, say `power1_app`
-and select an operating system for the
-server. We recommend  the `Ubuntu` OS. Ubuntu is a mature Linux distribution
-based on Debain Linux. Click
-the `Ubuntu` button. (see margin figure)
+To obtain a dedicated domain name, I left the EC2 dashboard
+and went to the Amazon Route 53 dashboard (select
+**Services** at the top and search for **Route 53**).
 
+Once I acquired a domain name (e.g., `rgtlab.org`), I
+associated it with my static IP through Route 53:
 
-3.  Next choose an instance **type**, e.g. `t2-micro`. Different
-    instance types are combinations of number and architecture of
-    processors, memory, storage capacity, and network performance. The
-    `t2-micro` type, for example, has 1 cpu and 1 GiB of memory. 
+- Click on **Hosted zones** in the side panel.
+- Click on `rgtlab.org` in the centre panel.
+- Click the checkbox for the `rgtlab.org` Type=A record.
+- Click **Edit record** in the right panel.
+- Change the IP address to the assigned static IP
+  (e.g., 111.222.333.444) in the **Value** field.
 
+# Selecting and Launching the Instance
 
-5.  choose a Key pair e.g. select `power1_app` the drop down list.
+From **Instances** in the EC2 dashboard, I clicked
+**Launch Instances** and followed these steps:
 
-6.  Select a Security Group, e.g. use `power1_app` from your environment.
+1. **Name the server:** I entered `power1_app`.
+2. **Select the operating system:** I chose Ubuntu, a
+   mature Linux distribution based on Debian.
+3. **Choose an instance type:** I selected `t2.micro`,
+   which provides 1 CPU and 1 GiB of memory. Different
+   instance types offer varying combinations of processors,
+   memory, storage, and network performance.
+4. **Choose a key pair:** I selected `power1_app` from the
+   dropdown list.
+5. **Select a security group:** I used the `power1_app`
+   security group from my environment.
+6. **Choose storage:** I entered 30 GB of EBS General
+   Purpose SSD (GP2). Thirty gigabytes is the maximum
+   allowed in the free tier. In my experience, smaller disk
+   sizes can lead to problems during Docker image builds.
+7. **Advanced options:** Under advanced options, I scrolled
+   to the bottom and uploaded my startup script (see the
+   Startup Script section below) to run one time after
+   server generation.
+8. **Launch:** I clicked **Launch Instance**.
 
-7.  choose a storage amount. e.g. enter 30 GB of `EBS General Purpose SSD GP2` . 
-   Thirty GBs is the maximum allowed in the 'Free tier' of
-    servers on AWS. In our experience smaller disk sizes can lead to problems. 
+After the instance launched, I opened the Elastic IP dialog
+under **Network & Security**, selected the **Actions**
+button, and associated the IP address with the new instance.
 
-8.  Under `advanced options` scroll to the bottom and browse to ??? if
-    you have setup code you want to run one time after server
-    generation. see an example in attendix 2 below.
+## Accessing the Server
 
-8.  click **Launch Instance**
-to launch the server.
+From my laptop, I logged into the server with:
 
-After the instance launches open the Elastic IP dialog under `Network
-Security` and the `Actions` button and associate the IP address with the
-new instance. 
-
-## Access server
-
-On your laptop log into server with
-
-``` sh
+```sh
 ssh -i "~/.ssh/power1_app" ubuntu@rgtlab.org
 ```
 
-# Appendix 1:  Tip  1
+## SSH Config File for Convenience
 
-::: {.callout-tip}
-
-## Tip 1.
-
-For convenience, construct a `config` file in `~/.ssh` as:
-
-``` sh
-Host rgtlab.org #domain name
-HostName 13.57.139.31 # static IP
-User ubuntu # default user on ubuntu server
-Port 22  # the default port ssh uses
-IdentityFile ~/.ssh/power1_app.pem # private key
-```
-
-then we can ssh into the new server with the appreviated command
-
-``` sh
-sh> ssh rgtlab.org
-```
-:::
-
-
-# Appendix 2: `aws_startup_code.sh`
+For convenience, I constructed a `config` file in `~/.ssh`:
 
 ```sh
+Host rgtlab.org
+HostName 13.57.139.31
+User ubuntu
+Port 22
+IdentityFile ~/.ssh/power1_app.pem
+```
 
+With this configuration in place, I can SSH into the server
+with the abbreviated command:
+
+```sh
+ssh rgtlab.org
+```
+
+# Startup Script for Docker Installation
+
+The following startup script installs Docker and Docker
+Compose on the Ubuntu instance. I uploaded this script in
+the **Advanced options** section of the instance launch
+process. It runs once, automatically, when the server first
+boots.
+
+```sh
 #!/bin/bash
 apt update
-# Add Docker and Docker Compose support to the Ubuntu's packages list
 apt-get install curl -y
 apt-get install gnupg -y
 apt-get install ca-certificates -y
 apt-get install lsb-release -y
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+curl -fsSL \
+  https://download.docker.com/linux/ubuntu/gpg | \
+  sudo gpg --dearmor \
+  -o /etc/apt/keyrings/docker.gpg
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
-echo "deb [arch="$(dpkg --print-architecture)" \
-signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-"$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
-sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+echo \
+  "deb [arch="$(dpkg --print-architecture)" \
+  signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  "$(. /etc/os-release \
+  && echo "$VERSION_CODENAME")" stable" | \
+  sudo tee \
+  /etc/apt/sources.list.d/docker.list > /dev/null
 apt-get update
-apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin -y
-su ubuntu - 
+apt-get install docker-ce docker-ce-cli \
+  containerd.io docker-compose-plugin -y
+su ubuntu -
 usermod -aG docker ubuntu
-
 ```
 
+This script installs the Docker engine, CLI, containerd
+runtime, and Docker Compose plugin. The final two lines
+add the default `ubuntu` user to the `docker` group so that
+Docker commands can be run without `sudo`.
 
-## Prerequisites
+## Things to Watch Out For
 
-In development
+1. **Key pair permissions matter.** If the private key file
+   has permissions broader than 400, SSH will refuse to use
+   it. I learned this the hard way after a "permissions too
+   open" error.
 
-## Step-by-Step Implementation
+2. **The free tier storage limit is 30 GB.** Choosing less
+   than 30 GB may seem sufficient initially, but Docker
+   images and system packages accumulate quickly.
 
-In development
+3. **Elastic IPs incur charges when unassociated.** AWS
+   charges for elastic IPs that are allocated but not
+   associated with a running instance. I always release
+   unused elastic IPs.
 
-## Key Takeaways
+4. **Security group rules default to deny all inbound.**
+   Forgetting to add SSH (port 22) to the inbound rules
+   means you cannot connect to your own server.
 
-In development
+5. **The startup script runs as root.** The `userdata`
+   script in the advanced options runs with root privileges
+   on first boot only. If it fails, you need to check
+   `/var/log/cloud-init-output.log` on the instance for
+   debugging.
 
-## Further Reading
+![UCSD Geisel Library at sunset, a place for focused
+technical work](media/images/ambiance3.jpg){.img-fluid}
 
-In development
+*Cloud infrastructure, like library architecture, benefits
+from careful planning and solid foundations.*
+
+## Lessons Learnt
+
+### Conceptual Understanding
+
+- Cloud servers are ordinary Linux machines running in
+  someone else's data centre; the mental model of "remote
+  laptop" is surprisingly accurate.
+- The four pre-launch components (key pair, firewall,
+  static IP, domain name) are independent of each other
+  and can be configured in any order.
+- Security groups act as stateful firewalls: if inbound
+  traffic is allowed, the corresponding outbound response
+  is automatically permitted.
+- Elastic IPs provide stability across instance reboots,
+  which is essential for maintaining DNS records.
+
+### Technical Skills
+
+- Generating and managing RSA key pairs with `ssh-keygen`
+  for both local and EC2-generated workflows.
+- Configuring SSH `config` files to simplify repeated
+  connections to remote servers.
+- Writing `userdata` startup scripts that run automatically
+  on first boot to install Docker and other dependencies.
+- Associating elastic IPs, security groups, and key pairs
+  with EC2 instances through the console interface.
+
+### Gotchas and Pitfalls
+
+- Forgetting to change key file permissions to 400 results
+  in an SSH connection refusal that can be confusing if you
+  have not seen it before.
+- The EC2 console interface changes periodically; screenshots
+  in tutorials may not match the current layout exactly.
+- Running out of disk space during Docker builds is a common
+  issue on instances with less than 30 GB of storage.
+- The `userdata` startup script only runs on first boot; if
+  you need to re-run it, you must either recreate the
+  instance or run the commands manually.
+
+## Limitations
+
+- This tutorial covers only the AWS EC2 console approach;
+  other providers (Azure, GCP, Digital Ocean) have different
+  workflows.
+- The free tier `t2.micro` instance has limited CPU and
+  memory, which may be insufficient for computationally
+  intensive Shiny applications.
+- The startup script installs Docker using a specific method
+  that may need updating as Docker's installation process
+  evolves.
+- This post covers only the pre-launch and basic launch
+  steps; configuring a web server, SSL certificates, and
+  reverse proxy are addressed in a separate post.
+- AWS pricing and free tier eligibility change over time;
+  readers should verify current terms before proceeding.
+- The security group configuration shown here allows SSH
+  and HTTPS from any IP address, which may not meet
+  institutional security requirements.
+
+## Opportunities for Improvement
+
+1. Automate the entire server provisioning process using
+   Terraform or AWS CloudFormation instead of manual
+   console clicks.
+2. Use AWS Systems Manager Session Manager for SSH access
+   without opening port 22, improving the security posture.
+3. Implement a more restrictive security group that limits
+   SSH access to specific IP addresses rather than
+   0.0.0.0/0.
+4. Create an AMI (Amazon Machine Image) with Docker
+   pre-installed to eliminate the need for a startup
+   script.
+5. Explore spot instances for non-production workloads to
+   reduce costs below the free tier threshold.
+6. Set up CloudWatch monitoring and billing alerts to avoid
+   unexpected charges.
+
+# Wrapping Up
+
+Setting up an AWS EC2 instance is a foundational skill for
+anyone who needs to host web applications, run Docker
+containers, or manage reproducible research environments in
+the cloud. The process involves four pre-launch components
+-- key pairs, security groups, elastic IPs, and domain names
+-- followed by a straightforward instance launch sequence.
+
+What I found most valuable in this process was understanding
+that each component serves a distinct, understandable
+purpose. The terminology is more intimidating than the actual
+configuration. Once the working environment is set up, it
+can be reused across multiple server instances.
+
+The next step from here is configuring the server for Shiny
+app hosting, which involves installing a web server (Caddy),
+obtaining an SSL certificate, and setting up a reverse proxy.
+That workflow is covered in a companion post on Dockerizing
+Shiny applications.
+
+Main takeaways:
+
+- The four pre-launch components (key pair, firewall,
+  static IP, domain name) are independent and reusable
+  across multiple server instances.
+- The free tier `t2.micro` instance with 30 GB storage is
+  sufficient for lightweight Shiny app hosting.
+- A startup script can automate Docker installation on
+  first boot, reducing manual configuration.
+- SSH config files simplify repeated connections and reduce
+  typing errors.
+
+# See Also
+
+### Related Posts
+
+- [Dockerizing a Shiny App for
+  Production](https://focusonr.org/blog/dockerize_simple/)
+  -- the companion post covering post-launch server
+  configuration.
+- [Creating a GitHub Dotfiles Repository for Configuration
+  Management](https://focusonr.org/posts/24-setupdotfilesongithub/)
+  -- managing configuration files across machines.
+- [Configure the Command Line for Data Science
+  Development](https://focusonr.org/posts/01-configtermzsh/)
+  -- terminal and shell setup for productive development.
+
+### Key Resources
+
+- [AWS EC2 User
+  Guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/)
+  -- official documentation for EC2 instances.
+- [SSH Public Key
+  Authentication](https://www.ssh.com/academy/ssh/public-key-authentication)
+  -- reference for key pair generation and management.
+- [Docker Installation on
+  Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
+  -- official Docker installation guide.
+- [AWS Free Tier
+  Details](https://aws.amazon.com/free/) -- current free
+  tier eligibility and usage limits.
+
+# Reproducibility
+
+This tutorial does not involve R code execution. The
+commands shown are shell commands run either on a local
+macOS/Linux workstation or on the remote Ubuntu server.
+
+To reproduce the server setup:
+
+```sh
+ssh-keygen -m PEM
+sudo chmod 400 ~/.ssh/power1_app.pem
+ssh -i "~/.ssh/power1_app" ubuntu@rgtlab.org
+```
+
+The startup script can be saved as `aws_startup_code.sh`
+and uploaded during instance launch, or run manually after
+SSH access is established.
+
+```{r}
+#| label: session-info
+sessionInfo()
+```
+
+# Let's Connect
+
+- **GitHub:** [rgt47](https://github.com/rgt47)
+- **Twitter/X:** [@rgt47](https://twitter.com/rgt47)
+- **LinkedIn:**
+  [Ronald Glenn Thomas](https://linkedin.com/in/rgthomaslab)
+- **Email:**
+  [rgtlab.org/contact](https://rgtlab.org/contact)
+
+I would enjoy hearing from you if:
+
+- You spot an error or a better approach to any of the
+  code in this post.
+- You have suggestions for topics you would like to see
+  covered.
+- You want to discuss R programming, data science, or
+  reproducible research.
+- You have questions about anything in this tutorial.
+- You just want to say hello and connect.
