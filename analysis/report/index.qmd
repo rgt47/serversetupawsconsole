@@ -5,7 +5,7 @@ subtitle: >
   and accessing a lightweight cloud server
 author: "Ronald G. Thomas"
 date: "2026-02-11"
-categories: [AWS, DevOps, Docker]
+categories: [aws, ec2, shiny, docker, cloud-computing]
 description: >
   I did not really know how cloud servers worked
   until I needed to host a Shiny app for collaborators
