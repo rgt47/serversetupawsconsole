@@ -81,8 +81,7 @@ once you see what it does in practice.
 I am documenting my learning process here. If you spot
 errors or have better approaches, please let me know.
 
-![EC2 dashboard screenshot showing the instance launch
-workflow](media/images/ambiance1.png){.img-fluid}
+![](media/images/aws-logo.png){.img-fluid width=30% fig-align="center"}
 
 *The EC2 dashboard is the control centre for managing
 virtual servers, security groups, and elastic IP addresses.*
