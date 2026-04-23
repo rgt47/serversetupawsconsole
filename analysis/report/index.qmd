@@ -81,7 +81,7 @@ once you see what it does in practice.
 I am documenting my learning process here. If you spot
 errors or have better approaches, please let me know.
 
-![](media/images/aws-logo.png){.img-fluid width=30% fig-align="center"}
+![Settling in for infrastructure setup.](media/images/placeholder-coffee-03.jpg){.img-fluid width=30% fig-align="center"}
 
 *The EC2 dashboard is the control centre for managing
 virtual servers, security groups, and elastic IP addresses.*
@@ -388,6 +388,39 @@ runtime, and Docker Compose plugin. The final two lines
 add the default `ubuntu` user to the `docker` group so that
 Docker commands can be run without `sudo`.
 
+# Verification
+
+After launching the instance and associating the
+elastic IP, confirm that the server is accessible and
+Docker is installed.
+
+```sh
+ssh rgtlab.org "echo 'SSH connection successful'"
+```
+
+```sh
+ssh rgtlab.org "docker --version"
+```
+
+```sh
+ssh rgtlab.org "docker compose version"
+```
+
+If all three commands return expected output, the
+instance is correctly configured with SSH access and
+Docker installed.
+
+# Daily Workflow
+
+| Task | Command |
+|:-----|:--------|
+| Connect to server | `ssh rgtlab.org` |
+| Check instance status | AWS Console > EC2 > Instances |
+| View Docker containers | `ssh rgtlab.org "docker ps"` |
+| Check disk usage | `ssh rgtlab.org "df -h"` |
+| Review startup log | `ssh rgtlab.org "cat /var/log/cloud-init-output.log"` |
+| Reboot instance | AWS Console > Instance > Actions > Reboot |
+
 ## Things to Watch Out For
 
 1. **Key pair permissions matter.** If the private key file
@@ -414,15 +447,40 @@ Docker commands can be run without `sudo`.
    `/var/log/cloud-init-output.log` on the instance for
    debugging.
 
+# Uninstall / Rollback
+
+To tear down the EC2 instance and release all
+associated resources:
+
+1. **Terminate the instance:** EC2 Console >
+   Instances > select instance > Actions >
+   Terminate.
+2. **Release the elastic IP:** EC2 Console >
+   Elastic IPs > select IP > Actions > Release.
+3. **Delete the security group:** EC2 Console >
+   Security Groups > select group > Actions > Delete.
+4. **Remove local SSH config:** Delete the entry
+   from `~/.ssh/config` and remove the key file:
+
+```sh
+rm ~/.ssh/power1_app.pem
+```
+
+AWS does not charge for terminated instances. Elastic
+IPs incur charges only while allocated, so releasing
+them immediately avoids ongoing costs.
+
 ![UCSD Geisel Library at sunset, a place for focused
 technical work](media/images/ambiance3.jpg){.img-fluid}
 
 *Cloud infrastructure, like library architecture, benefits
 from careful planning and solid foundations.*
 
+# What Did We Learn?
+
 ## Lessons Learnt
 
-### Conceptual Understanding
+**Conceptual Understanding:**
 
 - Cloud servers are ordinary Linux machines running in
   someone else's data centre; the mental model of "remote
@@ -436,7 +494,7 @@ from careful planning and solid foundations.*
 - Elastic IPs provide stability across instance reboots,
   which is essential for maintaining DNS records.
 
-### Technical Skills
+**Technical Skills:**
 
 - Generating and managing RSA key pairs with `ssh-keygen`
   for both local and EC2-generated workflows.
@@ -447,7 +505,7 @@ from careful planning and solid foundations.*
 - Associating elastic IPs, security groups, and key pairs
   with EC2 instances through the console interface.
 
-### Gotchas and Pitfalls
+**Gotchas and Pitfalls:**
 
 - Forgetting to change key file permissions to 400 results
   in an SSH connection refusal that can be confusing if you
