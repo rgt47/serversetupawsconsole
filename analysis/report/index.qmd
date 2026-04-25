@@ -3,7 +3,7 @@ title: "Setting Up a Virtual Server on AWS EC2 Console"
 subtitle: >
   A step-by-step walkthrough for launching, securing,
   and accessing a lightweight cloud server
-author: "Ronald G. Thomas"
+author: "Ronald 'Ryy' G. Thomas"
 date: "2026-02-11"
 categories: [aws, ec2, shiny, docker, cloud-computing]
 description: >
