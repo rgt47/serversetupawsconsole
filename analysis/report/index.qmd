@@ -92,7 +92,7 @@ scaling better past the first few iterations.
 I am documenting my learning process here. If you spot
 errors or have better approaches, please let me know.
 
-![Settling in for infrastructure setup.](media/images/placeholder-coffee-03.jpg){.img-fluid width=30% fig-align="center"}
+![Settling in for infrastructure setup.](media/images/ambiance1.png){.img-fluid width=30% fig-align="center"}
 
 *The EC2 dashboard is the control centre for managing
 virtual servers, security groups, and elastic IP addresses.*
