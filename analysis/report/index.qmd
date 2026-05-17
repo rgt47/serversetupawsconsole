@@ -1,8 +1,5 @@
 ---
 title: "Setting Up a Virtual Server on AWS EC2 Console"
-subtitle: >
-  A step-by-step walkthrough for launching, securing,
-  and accessing a lightweight cloud server
 author: "Ronald 'Ryy' G. Thomas"
 date: "2026-02-11"
 categories: [aws, shiny, docker]
@@ -24,7 +21,7 @@ format:
 ---
 
 ![AWS EC2 console workflow for launching a virtual
-server](media/images/hero.jpg){.img-fluid width=80%}
+server](media/images/hero.jpg){.img-fluid width=80% fig-align="center"}
 
 *Setting up a cloud server -- the gateway to hosting
 web applications on your own terms.*
